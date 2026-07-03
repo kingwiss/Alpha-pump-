@@ -18,14 +18,15 @@ export function getAbsoluteUrl(path: string): string {
   
   let origin = "";
   
-  // 1. Try injected process.env.APP_URL first (set in vite.config.ts)
+  // 1. Try injected APP_URL first (set in vite.config.ts)
   try {
-    const envUrl = (typeof process !== "undefined" && process.env && process.env.APP_URL) || "";
+    // We use a direct reference so Vite's define plugin can replace it statically
+    const envUrl = process.env.APP_URL || "";
     if (envUrl) {
       origin = parseOriginFromUrl(envUrl);
     }
   } catch (e) {
-    // Ignored
+    // Ignored (process might be not defined if Vite didn't replace it)
   }
   
   // 2. Try import.meta.url (the most reliable source of actual host domain in sandboxed iframes)

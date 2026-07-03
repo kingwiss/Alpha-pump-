@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import dotenv from "dotenv";
-import { createServer as createViteServer } from "vite";
+import fs from "fs";
 import { GoogleGenAI, Type } from "@google/genai";
 import { Connection, PublicKey, Keypair, VersionedTransaction, SystemProgram, Transaction } from "@solana/web3.js";
 import bs58 from "bs58";
@@ -11,7 +11,7 @@ import { getAuth } from "firebase-admin/auth";
 
 dotenv.config();
 
-import firebaseConfig from "./firebase-applet-config.json";
+import firebaseConfig from "./firebase-applet-config.json" with { type: "json" };
 
 // Initialize Firebase Admin
 let adminApp;
@@ -118,35 +118,50 @@ const fetchDexScreenerTokens = async () => {
   }
 
   try {
-    // 1. Fetch freshest tokens from token-profiles endpoint
-    const profilesRes = await fetch("https://api.dexscreener.com/token-profiles/latest/v1");
-    const profilesData = await profilesRes.json();
-    const solanaProfiles = (profilesData || []).filter((p: any) => p.chainId === "solana").slice(0, 30);
-    const tokenAddresses = solanaProfiles.map((p: any) => p.tokenAddress).join(",");
-
     let freshPairs: any[] = [];
-    if (tokenAddresses) {
-      const freshPairsRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenAddresses}`);
-      const freshPairsData = await freshPairsRes.json();
-      freshPairs = (freshPairsData.pairs || []).filter((p: any) => p.chainId === "solana" && p.baseToken && p.baseToken.symbol !== "SOL" && p.baseToken.symbol !== "USDC");
+    try {
+      // 1. Fetch freshest tokens from token-profiles endpoint
+      const profilesRes = await fetch("https://api.dexscreener.com/token-profiles/latest/v1");
+      if (profilesRes.ok) {
+        const text = await profilesRes.text();
+        let profilesData = [];
+        try { profilesData = JSON.parse(text); } catch (e) {}
+        const solanaProfiles = (Array.isArray(profilesData) ? profilesData : []).filter((p: any) => p.chainId === "solana").slice(0, 30);
+        const tokenAddresses = solanaProfiles.map((p: any) => p.tokenAddress).join(",");
+
+        if (tokenAddresses) {
+          const freshPairsRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenAddresses}`);
+          if (freshPairsRes.ok) {
+            const freshPairsData = await freshPairsRes.json();
+            freshPairs = (freshPairsData.pairs || []).filter((p: any) => p.chainId === "solana" && p.baseToken && p.baseToken.symbol !== "SOL" && p.baseToken.symbol !== "USDC");
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Error fetching fresh profiles:", e);
     }
 
-    // 2. Fetch trending tokens by searching for popular meme keywords and sorting by volume
-    const [pumpRes, catRes, dogRes] = await Promise.all([
-      fetch("https://api.dexscreener.com/latest/dex/search?q=pump"),
-      fetch("https://api.dexscreener.com/latest/dex/search?q=cat"),
-      fetch("https://api.dexscreener.com/latest/dex/search?q=dog")
-    ]);
-    
-    const pumpData = await pumpRes.json();
-    const catData = await catRes.json();
-    const dogData = await dogRes.json();
+    let allTrendingPairs: any[] = [];
+    try {
+      // 2. Fetch trending tokens by searching for popular meme keywords and sorting by volume
+      const results = await Promise.allSettled([
+        fetch("https://api.dexscreener.com/latest/dex/search?q=pump").then(r => r.json()),
+        fetch("https://api.dexscreener.com/latest/dex/search?q=cat").then(r => r.json()),
+        fetch("https://api.dexscreener.com/latest/dex/search?q=dog").then(r => r.json())
+      ]);
+      
+      const pumpData = results[0].status === "fulfilled" ? results[0].value : {};
+      const catData = results[1].status === "fulfilled" ? results[1].value : {};
+      const dogData = results[2].status === "fulfilled" ? results[2].value : {};
 
-    const allTrendingPairs = [
-      ...(pumpData.pairs || []), 
-      ...(catData.pairs || []),
-      ...(dogData.pairs || [])
-    ].filter(p => p.chainId === "solana" && p.baseToken && p.baseToken.symbol !== "SOL" && p.baseToken.symbol !== "USDC");
+      allTrendingPairs = [
+        ...(pumpData?.pairs || []), 
+        ...(catData?.pairs || []),
+        ...(dogData?.pairs || [])
+      ].filter((p: any) => p.chainId === "solana" && p.baseToken && p.baseToken.symbol !== "SOL" && p.baseToken.symbol !== "USDC");
+    } catch (e) {
+      console.error("Error fetching trending pairs:", e);
+    }
     
     // Deduplicate by pairAddress
     const uniquePairs = new Map();
@@ -223,6 +238,36 @@ const fetchDexScreenerTokens = async () => {
       }
     }
     finalTrending = Array.from(uniqueTrending.values()).slice(0, 20);
+    
+    // Add fallback dummy tokens if everything failed (e.g. rate limit on first load)
+    if (finalFresh.length === 0 && finalTrending.length === 0) {
+      const fallbackToken = mapToMemeCoin({
+        pairAddress: "fallback1",
+        baseToken: { name: "Solana Meme Coin (Fallback)", symbol: "SMC", address: "So11111111111111111111111111111111111111112" },
+        priceNative: "0.0001",
+        priceUsd: "0.01",
+        priceChange: { m5: 1, h1: 5, h24: 10 },
+        volume: { h24: 1000000 },
+        liquidity: { usd: 500000 },
+        fdv: 10000000,
+        pairCreatedAt: Date.now() - 30 * 60 * 1000 // 30 mins ago
+      }, "trending");
+      
+      const fallbackFresh = mapToMemeCoin({
+        pairAddress: "fallback_fresh1",
+        baseToken: { name: "New Alpha (Fallback)", symbol: "ALPHA", address: "So11111111111111111111111111111111111111113" },
+        priceNative: "0.00005",
+        priceUsd: "0.005",
+        priceChange: { m5: 15, h1: 150, h24: 150 },
+        volume: { h24: 500000 },
+        liquidity: { usd: 100000 },
+        fdv: 5000000,
+        pairCreatedAt: Date.now() - 10 * 60 * 1000 // 10 mins ago
+      }, "fresh");
+
+      finalTrending = [fallbackToken];
+      finalFresh = [fallbackFresh];
+    }
 
     cachedTokens = {
       fresh: finalFresh,
@@ -507,9 +552,21 @@ app.get("/api/search", async (req, res) => {
     if (!query) return res.json({ success: true, results: [] });
 
     const response = await fetch(`https://api.dexscreener.com/latest/dex/search?q=${encodeURIComponent(query)}`);
-    const data = await response.json();
+    if (!response.ok) {
+      console.error("DexScreener search failed:", response.statusText);
+      return res.json({ success: true, results: [] });
+    }
     
-    const solanaPairs = (data.pairs || []).filter((p: any) => p.chainId === "solana");
+    let data;
+    try {
+      const text = await response.text();
+      data = JSON.parse(text);
+    } catch (e) {
+      console.error("DexScreener search JSON parse failed:", e);
+      return res.json({ success: true, results: [] });
+    }
+    
+    const solanaPairs = (data?.pairs || []).filter((p: any) => p.chainId === "solana");
     
     const results = solanaPairs.map((p: any) => {
       const now = Date.now();
@@ -676,7 +733,8 @@ app.post("/api/sentiment/:id", async (req, res) => {
 
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
+    const viteModule = await import("vite");
+    const vite = await viteModule.createServer({ server: { middlewareMode: true }, appType: "spa" });
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
