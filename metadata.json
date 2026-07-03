@@ -1,0 +1,6 @@
+{
+  "name": "Alpha pump",
+  "description": "Premium dark-mode Web3 dashboard tracking real-time Fresh & Viral and Verified & Trending meme coins, powered by Stellar SDK trading swaps and Gemini-analyzed Twitter sentiment.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

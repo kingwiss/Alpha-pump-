@@ -1,0 +1,27 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User wallet configuration",
+      "type": "object",
+      "properties": {
+        "publicKey": {
+          "type": "string"
+        },
+        "secretKey": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "number"
+        }
+      },
+      "required": ["publicKey", "secretKey"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profiles and their Solana wallet credentials"
+    }
+  }
+}
