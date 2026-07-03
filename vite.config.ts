@@ -7,7 +7,7 @@ export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
     define: {
-      'process.env.APP_URL': JSON.stringify(process.env.APP_URL || ''),
+      'process.env.APP_URL': JSON.stringify(process.env.APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '')),
     },
     resolve: {
       alias: {

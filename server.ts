@@ -685,4 +685,9 @@ async function startServer() {
   }
   app.listen(PORT, "0.0.0.0", () => console.log(`Server running on port ${PORT}`));
 }
-startServer();
+
+if (!process.env.VERCEL) {
+  startServer();
+}
+
+export default app;
