@@ -15,75 +15,76 @@ export function getAbsoluteUrl(path: string): string {
   if (path.startsWith("http://") || path.startsWith("https://")) {
     return path;
   }
-  
+
+  // NOTE: We don't return the relative path natively because Safari throws "The string did not match the expected pattern."
+  // when `fetch()` is called with a relative path in certain iframe environments where the base URL is invalid (e.g. data URI or about:blank).
+  // We MUST explicitly resolve the absolute URL.
+
   let origin = "";
   
-  // 1. Try injected APP_URL first (set in vite.config.ts)
-  try {
-    // We use a direct reference so Vite's define plugin can replace it statically
-    const envUrl = process.env.APP_URL || "";
-    if (envUrl) {
-      origin = parseOriginFromUrl(envUrl);
-    }
-  } catch (e) {
-    // Ignored (process might be not defined if Vite didn't replace it)
+  // 1. First, ALWAYS prefer the actual browser environment location to avoid CORS on Vercel aliases
+  if (!origin) {
+    try {
+      if (typeof window !== "undefined" && window.location && window.location.origin && window.location.origin !== "null" && !window.location.origin.startsWith("about:") && !window.location.origin.startsWith("data:")) {
+        origin = window.location.origin;
+      }
+    } catch (e) {}
   }
   
-  // 2. Try import.meta.url (the most reliable source of actual host domain in sandboxed iframes)
+  // 2. Try injected APP_URL (set in vite.config.ts) if window location is unavailable or sandbox blocked
+  if (!origin) {
+    try {
+      const envUrl = process.env.APP_URL || "";
+      if (envUrl) {
+        origin = parseOriginFromUrl(envUrl);
+      }
+    } catch (e) {}
+  }
+  
+  // 2.5 Try import.meta.url
   if (!origin) {
     try {
       if (import.meta && import.meta.url) {
         origin = parseOriginFromUrl(import.meta.url);
       }
-    } catch (e) {
-      // Ignored
-    }
-  }
-  
-  // 3. Fallback to window.location.origin
-  if (!origin) {
-    try {
-      if (window.location.origin && window.location.origin !== "null") {
-        origin = window.location.origin;
-      }
-    } catch (e) {
-      // Ignored
-    }
+    } catch (e) {}
   }
   
   // 4. Fallback to document.referrer (helps in nested preview situations)
   if (!origin) {
     try {
-      if (document.referrer) {
+      if (typeof document !== "undefined" && document.referrer) {
         origin = parseOriginFromUrl(document.referrer);
       }
-    } catch (e) {
-      // Ignored
-    }
+    } catch (e) {}
   }
-  
+
   // 5. Fallback to window.location.href / document.URL
   if (!origin) {
     try {
-      const href = window.location.href || document.URL;
-      if (href) {
-        origin = parseOriginFromUrl(href);
+      if (typeof window !== "undefined" && window.location && window.location.href) {
+        origin = parseOriginFromUrl(window.location.href);
+      } else if (typeof document !== "undefined" && document.URL) {
+        origin = parseOriginFromUrl(document.URL);
       }
-    } catch (e) {
-      // Ignored
-    }
+    } catch (e) {}
   }
 
   // 6. Manual construction from window.location.host as a bulletproof sandbox fallback
   if (!origin) {
     try {
-      if (window.location && window.location.host) {
+      if (typeof window !== "undefined" && window.location && window.location.host) {
         const proto = window.location.protocol && window.location.protocol.startsWith("http") ? window.location.protocol : "https:";
         origin = `${proto}//${window.location.host}`;
       }
-    } catch (e) {
-      // Ignored
-    }
+    } catch (e) {}
+  }
+
+  // Final fallback if absolutely nothing else worked (safeguard)
+  if (!origin && typeof window !== "undefined") {
+    // If we couldn't resolve any absolute URL, we will return the relative path as a very last resort,
+    // though this might fail on Safari if the document base is invalid.
+    return path;
   }
   
   const cleanOrigin = origin ? origin.replace(/\/$/, "") : "";
@@ -93,7 +94,6 @@ export function getAbsoluteUrl(path: string): string {
 }
 
 let sharedCtx: AudioContext | null = null;
-
 function getSharedContext(): AudioContext | null {
   if (typeof window === "undefined") return null;
   const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
@@ -111,7 +111,6 @@ if (typeof window !== "undefined") {
     if (ctx) {
       if (ctx.state === "suspended") {
         ctx.resume().then(() => {
-          // Clean up listeners once unlocked
           window.removeEventListener("click", unlock);
           window.removeEventListener("touchstart", unlock);
           window.removeEventListener("keydown", unlock);
@@ -132,15 +131,12 @@ if (typeof window !== "undefined") {
 
 export function playCuteUpdateSound() {
   try {
-    // Respect the user's active attention: Do not play sounds if the tab is hidden or backgrounded
     if (typeof document !== "undefined" && document.hidden) {
       return;
     }
-
     const ctx = getSharedContext();
     if (!ctx) return;
     
-    // Attempt to resume context if it remains suspended
     if (ctx.state === "suspended") {
       ctx.resume().catch(() => {});
     }
@@ -153,16 +149,14 @@ export function playCuteUpdateSound() {
     osc2.connect(gainNode);
     gainNode.connect(ctx.destination);
     
-    // A clean, bright, sweet frequency sweep for a modern retro chime
     osc1.type = "sine";
-    osc1.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
-    osc1.frequency.exponentialRampToValueAtTime(880.00, ctx.currentTime + 0.12); // A5
+    osc1.frequency.setValueAtTime(587.33, ctx.currentTime);
+    osc1.frequency.exponentialRampToValueAtTime(880.00, ctx.currentTime + 0.12);
     
     osc2.type = "triangle";
-    osc2.frequency.setValueAtTime(293.66, ctx.currentTime); // D4
-    osc2.frequency.exponentialRampToValueAtTime(440.00, ctx.currentTime + 0.12); // A4
+    osc2.frequency.setValueAtTime(293.66, ctx.currentTime);
+    osc2.frequency.exponentialRampToValueAtTime(440.00, ctx.currentTime + 0.12);
     
-    // Soft, pleasant volume envelope
     gainNode.gain.setValueAtTime(0.05, ctx.currentTime);
     gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
     
@@ -174,4 +168,3 @@ export function playCuteUpdateSound() {
     console.warn("Web Audio sound playback failed:", err);
   }
 }
-
