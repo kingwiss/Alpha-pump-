@@ -35,36 +35,32 @@ module.exports = __toCommonJS(server_exports);
 var import_express = __toESM(require("express"), 1);
 var import_path = __toESM(require("path"), 1);
 var import_dotenv = __toESM(require("dotenv"), 1);
+var import_fs = __toESM(require("fs"), 1);
 var import_genai = require("@google/genai");
 var import_web3 = require("@solana/web3.js");
 var import_bs58 = __toESM(require("bs58"), 1);
 var import_app = require("firebase-admin/app");
 var import_firestore = require("firebase-admin/firestore");
 var import_auth = require("firebase-admin/auth");
-
-// firebase-applet-config.json
-var firebase_applet_config_default = {
-  projectId: "gen-lang-client-0758275318",
-  appId: "1:425573221322:web:678428f7aa445817808533",
-  apiKey: "AIzaSyATXkkwSnUH7n0INQzA4DPYGSnMkocb_gk",
-  authDomain: "gen-lang-client-0758275318.firebaseapp.com",
-  firestoreDatabaseId: "ai-studio-memecoinalerts-6b194e80-d8dc-4bc6-a085-b9d9b2318aaa",
-  storageBucket: "gen-lang-client-0758275318.firebasestorage.app",
-  messagingSenderId: "425573221322",
-  measurementId: ""
-};
-
-// server.ts
+var firebaseConfig = {};
+try {
+  const configPath = import_path.default.resolve(process.cwd(), "firebase-applet-config.json");
+  if (import_fs.default.existsSync(configPath)) {
+    firebaseConfig = JSON.parse(import_fs.default.readFileSync(configPath, "utf-8"));
+  }
+} catch (e) {
+  console.error("Failed to read firebase config", e);
+}
 import_dotenv.default.config();
 var adminApp;
 if (!(0, import_app.getApps)().length) {
   adminApp = (0, import_app.initializeApp)({
-    projectId: firebase_applet_config_default.projectId
+    projectId: firebaseConfig.projectId
   });
 } else {
   adminApp = (0, import_app.getApps)()[0];
 }
-var db = (0, import_firestore.getFirestore)(adminApp, firebase_applet_config_default.firestoreDatabaseId);
+var db = (0, import_firestore.getFirestore)(adminApp, firebaseConfig.firestoreDatabaseId);
 var geminiApiKey = process.env.GEMINI_API_KEY || "";
 var ai = null;
 if (geminiApiKey && geminiApiKey !== "MY_GEMINI_API_KEY") {
@@ -109,7 +105,7 @@ var authenticateUser = async (req, res, next) => {
     next();
   } catch (error) {
     console.error("Auth error:", error);
-    require("fs").appendFileSync("/tmp/server_error.log", "\nAuth error: " + error);
+    import_fs.default.appendFileSync("/tmp/server_error.log", "\nAuth error: " + error);
     res.status(401).json({ success: false, error: "Unauthorized" });
   }
 };

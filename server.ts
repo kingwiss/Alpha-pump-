@@ -8,7 +8,15 @@ import bs58 from "bs58";
 import { initializeApp, getApps } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
-import firebaseConfig from "./firebase-applet-config.json" assert { type: "json" };
+let firebaseConfig: any = {};
+try {
+  const configPath = path.resolve(process.cwd(), "firebase-applet-config.json");
+  if (fs.existsSync(configPath)) {
+    firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+  }
+} catch (e) {
+  console.error("Failed to read firebase config", e);
+}
 
 dotenv.config();
 
@@ -73,7 +81,7 @@ const authenticateUser = async (req: express.Request, res: express.Response, nex
     (req as any).user = decodedToken;
     next();
   } catch (error) {
-    console.error("Auth error:", error); require("fs").appendFileSync("/tmp/server_error.log", "\nAuth error: " + error);
+    console.error("Auth error:", error); fs.appendFileSync("/tmp/server_error.log", "\nAuth error: " + error);
     res.status(401).json({ success: false, error: "Unauthorized" });
   }
 };
@@ -212,10 +220,18 @@ const fetchDexScreenerTokens = async () => {
       };
     };
 
-    // Filter fresh pairs to strictly < 1 hour old to ensure they are new
+    // Filter fresh pairs to relatively new (e.g. < 7 days old) to guarantee plenty of beautiful coins display, sorted newest first
     let finalFresh = freshPairs
-      .filter(p => p.pairCreatedAt && (now - p.pairCreatedAt) < 1 * 60 * 60 * 1000)
-      .map(p => mapToMemeCoin(p, "fresh"));
+      .filter(p => p.pairCreatedAt && (now - p.pairCreatedAt) < 7 * 24 * 60 * 60 * 1000)
+      .map(p => mapToMemeCoin(p, "fresh"))
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      
+    // If 7-day filter results in empty, relax to any profiles from DexScreener to guarantee the app is never empty
+    if (finalFresh.length === 0 && freshPairs.length > 0) {
+      finalFresh = freshPairs
+        .map(p => mapToMemeCoin(p, "fresh"))
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }
       
     // Deduplicate fresh pairs based on mintAddress
     const uniqueFresh = new Map();
