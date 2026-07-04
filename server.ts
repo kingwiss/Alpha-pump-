@@ -8,10 +8,9 @@ import bs58 from "bs58";
 import { initializeApp, getApps } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
+import firebaseConfig from "./firebase-applet-config.json" with { type: "json" };
 
 dotenv.config();
-
-import firebaseConfig from "./firebase-applet-config.json" with { type: "json" };
 
 // Initialize Firebase Admin
 let adminApp;
