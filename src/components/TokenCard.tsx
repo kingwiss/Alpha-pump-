@@ -82,11 +82,25 @@ export default function TokenCard({ coin, onSelect, onBuy }: TokenCardProps) {
             {/* Age or Creation Timestamp */}
             <p className="text-[10px] text-gray-400 font-mono mt-0.5 flex items-center gap-1">
               <Clock size={10} className="text-slate-500" />
-              {coin.type === "fresh" ? (
-                <span className="text-cyan-400/80 font-medium animate-pulse">Created under 1h ago</span>
-              ) : (
-                <span className="text-slate-400">Verified & Trending</span>
-              )}
+              <span className={coin.type === "fresh" ? "text-cyan-400/90 font-semibold animate-pulse" : "text-slate-400"}>
+                {(() => {
+                  const diffMs = Date.now() - new Date(coin.createdAt).getTime();
+                  if (diffMs <= 0) return "Just now";
+                  const diffMins = Math.floor(diffMs / 60000);
+                  if (diffMins < 1) {
+                    const diffSecs = Math.max(1, Math.floor(diffMs / 1000));
+                    return `${diffSecs}s ago`;
+                  }
+                  if (diffMins < 60) {
+                    return `${diffMins}m ago`;
+                  }
+                  const diffHours = Math.floor(diffMins / 60);
+                  if (diffHours < 24) {
+                    return `${diffHours}h ago`;
+                  }
+                  return `${Math.floor(diffHours / 24)}d ago`;
+                })()}
+              </span>
             </p>
           </div>
         </div>

@@ -242,11 +242,25 @@ export default function TokenModal({ coin, onClose, onSwapClick }: TokenModalPro
             <div className="p-3 bg-slate-900 border border-slate-800 rounded-2xl">
               <span className="text-[9px] text-gray-400 font-mono block">AGE STATUS</span>
               <span className="text-xs font-mono font-semibold text-gray-200 mt-1 block flex items-center gap-1">
-                {coin.type === "fresh" ? (
-                  <span className="text-cyan-400 animate-pulse font-bold">● Launched &lt; 1hr</span>
-                ) : (
-                  <span className="text-emerald-400 font-bold">● High Traffic Viral</span>
-                )}
+                <span className={coin.type === "fresh" ? "text-cyan-400 animate-pulse font-bold" : "text-emerald-400 font-bold"}>
+                  ● {(() => {
+                    const diffMs = Date.now() - new Date(coin.createdAt).getTime();
+                    if (diffMs <= 0) return "Just now";
+                    const diffMins = Math.floor(diffMs / 60000);
+                    if (diffMins < 1) {
+                      const diffSecs = Math.max(1, Math.floor(diffMs / 1000));
+                      return `${diffSecs}s old`;
+                    }
+                    if (diffMins < 60) {
+                      return `${diffMins}m old`;
+                    }
+                    const diffHours = Math.floor(diffMins / 60);
+                    if (diffHours < 24) {
+                      return `${diffHours}h old`;
+                    }
+                    return `${Math.floor(diffHours / 24)}d old`;
+                  })()}
+                </span>
               </span>
             </div>
           </div>

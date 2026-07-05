@@ -1,0 +1,6 @@
+{
+  "firestore": {
+    "database": "ai-studio-memecoinalerts-6b194e80-d8dc-4bc6-a085-b9d9b2318aaa",
+    "rules": "firestore.rules"
+  }
+}

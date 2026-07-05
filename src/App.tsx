@@ -124,13 +124,28 @@ export default function App() {
             // 1. Add all new coins so they are always in the list with freshest prices/data
             (newList || []).forEach((coin) => {
               if (coin && coin.mintAddress) {
-                mergedMap.set(coin.mintAddress, coin);
+                // If type is fresh, strictly ensure it's under 1 hour old
+                if (type === "fresh") {
+                  const ageMs = Date.now() - new Date(coin.createdAt).getTime();
+                  if (ageMs > 0 && ageMs < 3600000) {
+                    mergedMap.set(coin.mintAddress, coin);
+                  }
+                } else {
+                  mergedMap.set(coin.mintAddress, coin);
+                }
               }
             });
             
             // 2. Add old coins that are "still doing good" but not in the new list
             (oldList || []).forEach((coin) => {
               if (coin && coin.mintAddress && !mergedMap.has(coin.mintAddress)) {
+                // For fresh section, MUST still be under 1 hour old!
+                if (type === "fresh") {
+                  const ageMs = Date.now() - new Date(coin.createdAt).getTime();
+                  if (ageMs <= 0 || ageMs >= 3600000) {
+                    return; // Strictly ignore if 1 hour or older
+                  }
+                }
                 // Keep it if it's doing good: positive price change over 5m, 1h, or 24h, or is viral, or has high volume
                 const isDoingGood = coin.change1h > 0 || coin.change24h > 0 || coin.change5m > 0 || coin.isViral || coin.volume24h > 5000;
                 if (isDoingGood) {
@@ -139,7 +154,15 @@ export default function App() {
               }
             });
             
-            const mergedList = Array.from(mergedMap.values());
+            let mergedList = Array.from(mergedMap.values());
+            
+            // Double filter fresh list to be 100% bulletproof
+            if (type === "fresh") {
+              mergedList = mergedList.filter((coin) => {
+                const ageMs = Date.now() - new Date(coin.createdAt).getTime();
+                return ageMs > 0 && ageMs < 3600000; // Under 1 hour old!
+              });
+            }
             
             // 3. Sort correctly: Fresh by newest age first, Trending by volume (descending)
             if (type === "fresh") {
